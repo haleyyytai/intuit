@@ -24,8 +24,9 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from lending import npv_repaid, npv_default, LoanTerms  # noqa: E402
-from calibration import fit_isotonic, tune_width_multiplier, crossfit_report  # noqa: E402
+from lending import LoanTerms  # noqa: E402
+import economics as econ  # noqa: E402
+from calibration import fit_isotonic, crossfit_report  # noqa: E402
 
 CH = ROOT.parent / "challenge" / "intuit-techweek-nyc-hackathon-2026-master"
 DATA = CH / "dataset"
@@ -145,22 +146,19 @@ class WeeklyHazard:
         return CDR[:, -1], CDR, H
 
 
-# --------------------------------------------------------------------------- #
-# Expected NPV from weekly hazard (decision rule for A)
-# --------------------------------------------------------------------------- #
-def expected_npv(R, H):
-    """E[NPV] using weekly hazard H (n,13); default day approximated as week midpoint."""
-    R = np.asarray(R, float)
-    n = len(R)
-    surv_prev = np.ones(n)
-    enpv = np.zeros(n)
-    for a in range(1, N_WEEKS + 1):
-        t_mid = min(7 * a - 3, 90)                       # midpoint day of the week
-        p_def = surv_prev * H[:, a - 1]
-        enpv += p_def * npv_default(R, t_mid, terms=TERMS)
-        surv_prev = surv_prev * (1 - H[:, a - 1])
-    enpv += surv_prev * npv_repaid(R, TERMS)             # survived -> repaid
-    return enpv
+# Deterministic descendants to recompute under a C intervention (Gate 7 fix).
+# requested_amount_to_observed_revenue = requested_amount / observed_monthly_revenue.
+DESCENDANT_TRIGGERS = {"requested_amount", "observed_monthly_revenue_avg_3mo"}
+
+
+def recompute_descendants(cf, trigger_mask):
+    """Recompute the requested/observed-revenue ratio for rows whose intervention
+    changed one of its inputs (else the do-estimate silently keeps a stale ratio)."""
+    ra = pd.to_numeric(cf["requested_amount"], errors="coerce")
+    mr = pd.to_numeric(cf["observed_monthly_revenue_avg_3mo"], errors="coerce").replace(0, np.nan)
+    new_ratio = ra / mr
+    cf.loc[trigger_mask, "requested_amount_to_observed_revenue"] = new_ratio[trigger_mask]
+    return cf
 
 
 # --------------------------------------------------------------------------- #
@@ -178,6 +176,11 @@ def main():
     feat_cols = feature_columns(tr)
     miss_cols = [c for c in feat_cols if tr[c].isna().mean() > 0.05]
     log(f"{len(feat_cols)} features, {len(miss_cols)} missingness flags")
+
+    # empirical loss-given-default by default week (Gate 5: realized NPV, not stylized)
+    lgd_week = econ.fit_lgd_by_week(tr[tr["default_flag"].notna()])
+    log(f"LGD ratio by week (realized NPV/R): "
+        f"w1={lgd_week[0]:.2f} w6={lgd_week[5]:.2f} w13={lgd_week[-1]:.2f}; repaid={econ.REPAID_RATIO:.4f}")
 
     Xtr = build_features(tr, feat_cols, miss_cols)
     Xva = build_features(va, feat_cols, miss_cols)
@@ -209,6 +212,24 @@ def main():
         models.append(WeeklyHazard(random_state=k).fit(PP.iloc[idx].reset_index(drop=True),
                                                        ev[idx], wv[idx]))
     log(f"trained {K}-model hazard ensemble")
+
+    # C-model: survival ensemble EXCLUDING the prior-underwriter group (Gate 7 causal
+    # fix). prior_underwriter_score is a DESCENDANT of the application features, so it
+    # must not be frozen under do(f_q). Audit: excluding it costs ~0 AUC.
+    feat_cols_C = [c for c in feat_cols if c != "prior_underwriter_score"]
+    miss_cols_C = [c for c in miss_cols if c != "prior_underwriter_score"]
+    XlabC = build_features(tr[labeled].reset_index(drop=True), feat_cols_C, miss_cols_C)
+    PPC, evC, wvC = expand_person_period(XlabC, dweek, w_ipw)
+    modelsC = []
+    for k in range(3):
+        idx = rng.randint(0, len(PPC), len(PPC))
+        modelsC.append(WeeklyHazard(random_state=100 + k).fit(
+            PPC.iloc[idx].reset_index(drop=True), evC[idx], wvC[idx]))
+    log("trained C-model (excludes prior-underwriter group)")
+
+    def ensemble_curves_C(Xa):
+        ps = [m.curves(Xa.copy())[0] for m in modelsC]
+        return np.mean(ps, 0), np.std(ps, 0)
 
     def ensemble_curves(Xa):
         Xa = Xa.copy()
@@ -250,7 +271,7 @@ def main():
     factor = pd_pt / np.clip(pd_raw, 1e-6, 1)                 # rescale hazards to match
     H_cal = np.clip(H_dec * factor[:, None], 1e-6, 1 - 1e-6)
     cdr_cal = np.clip(cdr_dec * factor[:, None], 0, 1)
-    enpv = expected_npv(dec_df["requested_amount"].to_numpy(), H_cal)
+    enpv = econ.expected_npv(dec_df["requested_amount"].to_numpy(), H_cal, lgd_week)
     decision = (enpv > 0).astype(int)
 
     # interval: epistemic (ensemble) + binomial sampling + extrapolation (low overlap)
@@ -304,7 +325,8 @@ def main():
         else:
             spread[c], med[c] = 1.0, 0.0
 
-    # batch: look up each query's applicant, apply do(feature=value), predict once
+    # batch: look up each query's applicant, apply do(feature=value), RECOMPUTE
+    # deterministic descendants, predict once with the prior-underwriter-free C model.
     n_missing = (~queries["applicant_id"].isin(master.index)).sum()
     if n_missing:
         log(f"  WARN: {n_missing} query applicant_ids not found in data (using NaN row)")
@@ -313,14 +335,20 @@ def main():
         feat = queries["feature_name"].iat[j]
         if feat in cf.columns:
             cf.iat[j, cf.columns.get_loc(feat)] = queries["intervention_value"].iat[j]
-    Xq = build_features(cf, feat_cols, miss_cols)
-    pdq_raw, sdq, _, _ = ensemble_curves(Xq)                  # one ensemble pass over 900
-    pdq = np.clip(iso.predict(pdq_raw), 0, 1)                 # calibrated counterfactual PD
+    trig = queries["feature_name"].isin(DESCENDANT_TRIGGERS).to_numpy()
+    cf = recompute_descendants(cf, trig)
+    log(f"  recomputed deterministic descendants for {int(trig.sum())} queries")
+
+    Xq = build_features(cf, feat_cols_C, miss_cols_C)         # C feature set (no prior-uw)
+    pdq_raw, sdq = ensemble_curves_C(Xq)                      # one C-ensemble pass over 900
+    pdq = np.clip(iso.predict(pdq_raw), 0, 1)                 # share the calibration map
+    # overlap widening (off-support intervention) + confounding sensitivity band
     extra = np.array([
         0.10 * min(3.0, abs(queries["intervention_value"].iat[j] - med.get(queries["feature_name"].iat[j], 0.0))
                    / spread.get(queries["feature_name"].iat[j], 1.0))
         for j in range(len(queries))])
-    h = 1.645 * sdq + binom_half(pdq) + extra
+    sens = 0.02 + 0.5 * pdq * (1 - pdq)                       # unobserved-confounding band
+    h = 1.645 * sdq + binom_half(pdq) + extra + sens
     C = pd.DataFrame({"query_id": queries["query_id"], "predicted_pd_cf": pdq,
                       "pd_cf_lower_90": np.clip(pdq - h, 0, 1),
                       "pd_cf_upper_90": np.clip(pdq + h, 0, 1)})
