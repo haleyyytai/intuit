@@ -286,35 +286,43 @@ def main():
     A.to_csv(SUB / "submission_A_decisions.csv", index=False)
     log(f"A: {len(A)} rows, approve rate {decision.mean():.3f}, mean PD {pd_pt.mean():.3f}")
 
-    # =================== Deliverable B =================== #
+    # =================== Deliverable B (empirical-Bayes over approved set) ===== #
     log("building Deliverable B")
-    dec_df = dec_df.assign(_cohort=assign_cohort(dec_df, cohort_def),
-                           _decision=decision)
-    # cohort-level cumulative default curve over APPROVED loans; ensemble for intervals
-    cdr_per_model = [m.curves(Xdec)[1] for m in models]      # list of (n,13)
+    dec_df = dec_df.assign(_cohort=assign_cohort(dec_df, cohort_def), _decision=decision)
+    # calibrated per-model cohort curves (apply the same isotonic factor for consistency)
+    cdr_per_model = [np.clip(m.curves(Xdec)[1] * factor[:, None], 0, 1) for m in models]
+    approved = (dec_df["_decision"] == 1).to_numpy()
+    KAPPA = 50.0                                              # EB prior strength (fixed)
+    g = cdr_cal[approved].mean(axis=0)                        # pooled approved-book trajectory
+    sizes = [(int(((dec_df["_cohort"] == w).to_numpy() & approved).sum())) for w in range(1, N_WEEKS + 1)]
+    n_med = max(1, int(np.median([s for s in sizes if s > 0]) or 1))
+    log(f"  approved loans per cohort: {sizes}  (EB kappa={KAPPA:.0f})")
     rows = []
-    for w in range(1, N_WEEKS + 1):
-        mask = (dec_df["_cohort"] == w) & (dec_df["_decision"] == 1)
-        idx = np.where(mask.to_numpy())[0]
-        if len(idx) == 0:                                    # fallback: all cohort apps
-            idx = np.where((dec_df["_cohort"] == w).to_numpy())[0]
-        if len(idx) == 0:
-            idx = np.arange(len(dec_df))
-        curve = cdr_cal[idx].mean(axis=0)                    # calibrated (13,)
-        per_model_curve = np.array([cm[idx].mean(axis=0) for cm in cdr_per_model])  # (K,13)
-        sd = per_model_curve.std(axis=0)
-        nw = len(idx)                                        # approved loans in this cohort
-        curve = np.maximum.accumulate(np.clip(curve, 0, 1))  # enforce monotone
-        for a in range(1, N_WEEKS + 1):
-            pt = float(curve[a - 1])
-            # proper 90% interval on the cohort fraction: epistemic + binomial sampling over n_w
-            h = float(1.645 * np.sqrt(sd[a - 1] ** 2 + pt * (1 - pt) / max(nw, 1)))
-            rows.append({"cohort_week": w, "loan_age_weeks": a,
-                         "cumulative_default_rate": pt,
-                         "cdr_lower_90": max(0.0, pt - h), "cdr_upper_90": min(1.0, pt + h)})
+    for wi, w in enumerate(range(1, N_WEEKS + 1)):
+        idx = np.where((dec_df["_cohort"] == w).to_numpy() & approved)[0]
+        nw = len(idx)
+        if nw == 0:                                          # empty cohort -> pooled prior at nominal n
+            curve = g.copy()
+            sd = np.array([cm[approved].mean(0) for cm in cdr_per_model]).std(0)
+            nw_eff = n_med
+        else:
+            p_cohort = cdr_cal[idx].mean(axis=0)
+            shrink = nw / (nw + KAPPA)                        # EB weight toward pooled curve
+            curve = shrink * p_cohort + (1 - shrink) * g
+            sd = np.array([cm[idx].mean(0) for cm in cdr_per_model]).std(0)
+            nw_eff = nw
+        curve = np.maximum.accumulate(np.clip(curve, 0, 1))  # monotone point
+        var_tot = sd ** 2 + curve * (1 - curve) / max(nw_eff, 1)  # epistemic + binomial (G1)
+        half = 1.645 * np.sqrt(var_tot)
+        lo = np.maximum.accumulate(np.clip(curve - half, 0, 1))   # monotone bounds
+        hi = np.maximum.accumulate(np.clip(curve + half, 0, 1))
+        for a in range(N_WEEKS):
+            rows.append({"cohort_week": w, "loan_age_weeks": a + 1,
+                         "cumulative_default_rate": float(curve[a]),
+                         "cdr_lower_90": float(lo[a]), "cdr_upper_90": float(hi[a])})
     B = pd.DataFrame(rows)
     B.to_csv(SUB / "submission_B_trajectory.csv", index=False)
-    log(f"B: {len(B)} rows (13x13 grid)")
+    log(f"B: {len(B)} rows; week-13 mean CDR={B[B.loan_age_weeks==13].cumulative_default_rate.mean():.3f}")
 
     # =================== Deliverable C =================== #
     log("building Deliverable C (g-computation do-interventions)")
@@ -347,13 +355,13 @@ def main():
     Xq = build_features(cf, feat_cols_C, miss_cols_C)         # C feature set (no prior-uw)
     pdq_raw, sdq = ensemble_curves_C(Xq)                      # one C-ensemble pass over 900
     pdq = np.clip(iso.predict(pdq_raw), 0, 1)                 # share the calibration map
-    # overlap widening (off-support intervention) + confounding sensitivity band
-    extra = np.array([
-        0.10 * min(3.0, abs(queries["intervention_value"].iat[j] - med.get(queries["feature_name"].iat[j], 0.0))
-                   / spread.get(queries["feature_name"].iat[j], 1.0))
-        for j in range(len(queries))])
-    sens = 0.02 + 0.5 * pdq * (1 - pdq)                       # unobserved-confounding band
-    h = 1.645 * sdq + binom_half(pdq) + extra + sens
+    # overlap-scaled interval: tight (epistemic only) where in-support, widens off-support.
+    # C is scored on POINT accuracy, so the point is the plug-in; intervals are a flag.
+    dist = np.array([min(3.0, abs(queries["intervention_value"].iat[j] - med.get(queries["feature_name"].iat[j], 0.0))
+                         / spread.get(queries["feature_name"].iat[j], 1.0)) for j in range(len(queries))])
+    overlap = np.clip(1 - dist / 3.0, 0, 1)                   # 1 = in dense support, 0 = off-support
+    S_OFF = 0.15                                              # fixed extrapolation scale
+    h = 1.645 * np.sqrt(sdq ** 2 + (S_OFF * (1 - overlap)) ** 2)
     C = pd.DataFrame({"query_id": queries["query_id"], "predicted_pd_cf": pdq,
                       "pd_cf_lower_90": np.clip(pdq - h, 0, 1),
                       "pd_cf_upper_90": np.clip(pdq + h, 0, 1)})

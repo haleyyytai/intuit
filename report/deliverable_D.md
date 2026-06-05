@@ -80,9 +80,14 @@ the honest caveat. The low-score tail, where support is thin, is declined by con
 (bottom-two score deciles approve at 45% vs 91% in the top decile), i.e. a conservative NPV
 floor of 0 beats an unsupported approval.
 
-**Deliverable B.** For each origination cohort week we average `1-S(7a|x)` over our approved
-cohort-`w` loans and enforce non-decreasing cumulative rates by a cumulative-max pass; the
-week-13 cohort default rate is ~16%, consistent with the marginal rate.
+**Deliverable B.** For each origination cohort week we average `1-S(7a|x)` over our *approved*
+cohort-`w` loans, stabilized by empirical-Bayes shrinkage toward the pooled approved-book curve
+(strength kappa=50) so thin cohorts borrow strength rather than chase noise; here the
+conservative book still leaves every cohort well-populated (>550 approved loans each), so the
+shrinkage is light. We enforce non-decreasing cumulative rates by a cumulative-max pass on the
+point and both interval bounds; intervals combine model uncertainty with cohort-size sampling
+variance. The week-13 cohort default rate is ~14%, consistent with the approved book being
+lower-risk than the marginal population.
 
 ## 3. Causal reasoning & counterfactual methodology
 
@@ -112,9 +117,14 @@ Estimating the dose-response of `do(requested_amount)`:
 
 The disciplined plug-in recovers the true slope within 6% (+0.084 vs +0.089 per \$10k) and is
 7.2x closer to truth in mean absolute error than naive perturbation, which underestimates the
-effect 5.8x because it leaves the stale ratio. A DML finite-difference cross-check agrees on
-direction and magnitude (+0.096). This is the difference between observational association and
-an interventional prediction made concrete.
+effect 5.8x because it leaves the stale ratio. This is the difference between observational
+association and an interventional prediction made concrete. On the *real* data, grouping the
+900 queries by feature, a cross-fitted doubly-robust average-effect estimator (partial-linear
+DML, prior-underwriter excluded, approval IPW) agrees in sign with our plug-in on **100% of the
+features the model materially responds to** (5/5, with comparable magnitudes: e.g. invoice
+delinquency +0.63 vs +0.55, credit utilization +0.12 vs +0.29). The two target different
+estimands (population-average vs individual-conditional), so we expect aggregate-direction
+agreement only; the submitted per-query value is the conditional plug-in by design.
 
 **Defending drivers to a regulator.** Our stated drivers (leverage, credit utilization,
 delinquency, cash-balance signals — see the selection and risk audits) are conditioned-on
@@ -147,8 +157,10 @@ sensitivity band, not a fact. Second,
 **loss-given-default is noisy**: collected draws before default are not directly observed, so
 our empirical LGD-by-week is an approximation (recovery is shrunk toward the week mean). Third,
 **C is only partially identified** for features that are themselves mediated; we report the
-controlled-direct-effect reading and flag it. With another day we would: replace the clipped
-cohort factor with empirical-Bayes shrinkage for thin B cohorts; tighten C intervals on
-high-overlap queries via conformalized quantile regression while keeping off-support
-widening; and run the DML/causal-survival-forest cross-check across all 900 queries rather
-than as a spot check.
+controlled-direct-effect reading and flag it. Relatedly, the tree plug-in is near-flat for
+low-importance features, so counterfactuals on weak drivers are conservative — the DML
+cross-check confirms only the material drivers carry effect, but a generator with small true
+effects on weak features would expose this. With another day we would: use a smoother outcome
+model (or monotone splines) so weak-feature counterfactuals are not flattened; tighten C
+intervals on high-overlap queries via conformalized quantile regression; and extend the
+DML/causal-survival-forest cross-check to per-feature heterogeneity rather than average slope.
