@@ -25,6 +25,7 @@ warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from lending import npv_repaid, npv_default, LoanTerms  # noqa: E402
+from calibration import fit_isotonic, tune_width_multiplier, crossfit_report  # noqa: E402
 
 CH = ROOT.parent / "challenge" / "intuit-techweek-nyc-hackathon-2026-master"
 DATA = CH / "dataset"
@@ -218,22 +219,46 @@ def main():
         return (np.mean(pds, 0), np.std(pds, 0),
                 np.mean(cdrs, 0), np.mean(hs, 0))
 
+    # --- calibration: isotonic point map + interval-width tuning on labeled val --- #
+    log("calibrating PD + tuning interval width on labeled validation")
+    vlab = va["default_flag"].notna().to_numpy()
+    Xval_lab = build_features(va[vlab], feat_cols, miss_cols)
+    pdv_raw, pdv_sd, _, _ = ensemble_curves(Xval_lab)
+    yv = (va.loc[vlab, "default_flag"] == True).astype(int).to_numpy()  # noqa: E712
+    base_half_v = 1.645 * pdv_sd + 0.03
+    rep = crossfit_report(pdv_raw, base_half_v, yv)
+    log(f"  ECE {rep['ece_raw']:.4f}->{rep['ece_cal']:.4f}  "
+        f"Brier {rep['brier_raw']:.4f}->{rep['brier_cal']:.4f}  "
+        f"interval_cov {rep['interval_coverage']:.3f}")
+    iso = fit_isotonic(pdv_raw, yv)
+    # NOTE: after isotonic calibration, point PD ~ empirical rate by construction, so a
+    # binned "empirical-rate-in-interval" check is trivially satisfied at any width and
+    # cannot tune it. Intervals instead reflect HONEST uncertainty: epistemic (bootstrap
+    # ensemble) + binomial sampling (sqrt(p(1-p)/n_eff)) + extrapolation (low overlap).
+    N_EFF = 60.0  # effective sample behind each PD (regularizes binomial term)
+    def binom_half(p):
+        return 1.645 * np.sqrt(np.clip(p, 1e-4, 1 - 1e-4) * (1 - np.clip(p, 1e-4, 1 - 1e-4)) / N_EFF)
+
     # =================== Deliverable A =================== #
     log("building Deliverable A")
     dec_df = pd.concat([va, te], ignore_index=True)
     Xdec = build_features(dec_df, feat_cols, miss_cols)
     e_dec = np.clip(eclf.predict_proba(Xdec)[:, 1], 1e-3, 1 - 1e-3)
-    pd_pt, pd_sd, cdr_dec, H_dec = ensemble_curves(Xdec)
+    pd_raw, pd_sd, cdr_dec, H_dec = ensemble_curves(Xdec)
 
-    enpv = expected_npv(dec_df["requested_amount"].to_numpy(), H_dec)
+    pd_pt = np.clip(iso.predict(pd_raw), 0, 1)                # calibrated point PD
+    factor = pd_pt / np.clip(pd_raw, 1e-6, 1)                 # rescale hazards to match
+    H_cal = np.clip(H_dec * factor[:, None], 1e-6, 1 - 1e-6)
+    cdr_cal = np.clip(cdr_dec * factor[:, None], 0, 1)
+    enpv = expected_npv(dec_df["requested_amount"].to_numpy(), H_cal)
     decision = (enpv > 0).astype(int)
 
-    # interval: ensemble epistemic + base floor + overlap (low approval-prop -> wider)
-    half = 1.645 * pd_sd + 0.03 + 0.15 * (1 - e_dec)
+    # interval: epistemic (ensemble) + binomial sampling + extrapolation (low overlap)
+    half = 1.645 * pd_sd + binom_half(pd_pt) + 0.15 * (1 - e_dec)
     pd_lo = np.clip(pd_pt - half, 0, 1)
     pd_hi = np.clip(pd_pt + half, 0, 1)
     A = pd.DataFrame({"applicant_id": dec_df["applicant_id"], "decision": decision,
-                      "predicted_pd": np.clip(pd_pt, 0, 1),
+                      "predicted_pd": pd_pt,
                       "pd_lower_90": pd_lo, "pd_upper_90": pd_hi})
     A.to_csv(SUB / "submission_A_decisions.csv", index=False)
     log(f"A: {len(A)} rows, approve rate {decision.mean():.3f}, mean PD {pd_pt.mean():.3f}")
@@ -252,12 +277,12 @@ def main():
             idx = np.where((dec_df["_cohort"] == w).to_numpy())[0]
         if len(idx) == 0:
             idx = np.arange(len(dec_df))
-        curve = cdr_dec[idx].mean(axis=0)                    # (13,)
+        curve = cdr_cal[idx].mean(axis=0)                    # calibrated (13,)
         per_model_curve = np.array([cm[idx].mean(axis=0) for cm in cdr_per_model])  # (K,13)
         sd = per_model_curve.std(axis=0)
         curve = np.maximum.accumulate(np.clip(curve, 0, 1))  # enforce monotone
         for a in range(1, N_WEEKS + 1):
-            pt = float(curve[a - 1]); h = float(1.645 * sd[a - 1] + 0.02)
+            pt = float(curve[a - 1]); h = float(1.645 * sd[a - 1] + binom_half(curve[a - 1]) / 3)
             rows.append({"cohort_week": w, "loan_age_weeks": a,
                          "cumulative_default_rate": pt,
                          "cdr_lower_90": max(0.0, pt - h), "cdr_upper_90": min(1.0, pt + h)})
@@ -289,13 +314,13 @@ def main():
         if feat in cf.columns:
             cf.iat[j, cf.columns.get_loc(feat)] = queries["intervention_value"].iat[j]
     Xq = build_features(cf, feat_cols, miss_cols)
-    pdq, sdq, _, _ = ensemble_curves(Xq)                      # one ensemble pass over 900
-    pdq = np.clip(pdq, 0, 1)
+    pdq_raw, sdq, _, _ = ensemble_curves(Xq)                  # one ensemble pass over 900
+    pdq = np.clip(iso.predict(pdq_raw), 0, 1)                 # calibrated counterfactual PD
     extra = np.array([
         0.10 * min(3.0, abs(queries["intervention_value"].iat[j] - med.get(queries["feature_name"].iat[j], 0.0))
                    / spread.get(queries["feature_name"].iat[j], 1.0))
         for j in range(len(queries))])
-    h = 1.645 * sdq + 0.03 + extra
+    h = 1.645 * sdq + binom_half(pdq) + extra
     C = pd.DataFrame({"query_id": queries["query_id"], "predicted_pd_cf": pdq,
                       "pd_cf_lower_90": np.clip(pdq - h, 0, 1),
                       "pd_cf_upper_90": np.clip(pdq + h, 0, 1)})
