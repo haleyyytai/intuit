@@ -22,13 +22,18 @@ is not the labeled distribution `P(default | x, approved)`. Critically, selectio
 when the prior underwriter's own score is included, and 0.720 from genuine applicant
 features alone. We therefore read the 1.000 as near-tautological — the prior *score is the
 decision's basis* — not as evidence that approval is deterministic in applicant features.
-Because selection is on observables, conditioning on those observables (including
-`prior_underwriter_score`) identifies the outcome model *where overlap exists*; the residual
-limit is **positivity**, which no reweighting can fix. Measured in genuine-feature space the
-no-overlap fraction is ~0 (share of the decision set with `e(x)<0.05` is 0.00), so positivity
-is a bounded caveat rather than a fatal one. We state ignorability as an *assumption* (the
-underwriter may have used private signal), supported by sensitivity analysis (§3), not as a
-fact proven by the propensity AUC.
+Because selection is on observables, conditioning on the recorded `prior_underwriter_score`
+makes selection ignorable and identifies the outcome model *where overlap exists*. But
+conditioning on the score **relocates rather than removes** the positivity problem: approval
+is a near-deterministic threshold on that score, so in the feature space the A/B model
+actually conditions on, ~43% of the decision set falls in a never-approved score range with no
+labeled analogs (`e(x)<0.05` for 0.43 of applicants). No reweighting fixes this; we handle it
+by **conservative decline** of that tail (§2), a safe NPV floor of 0 instead of an approval
+extrapolated past the data. Dropping the score would restore positivity but reintroduce it as
+*omitted confounding*, since the underwriter's signal would then be unobserved. We therefore
+state ignorability-given-the-score as an *assumption* (the underwriter may also have used
+private signal), backed by the §3 sensitivity analysis, not as a fact proven by the propensity
+AUC.
 
 **Right-censoring / timing.** Default is defined over a 90-day window (3 consecutive missed
 ACH draws, 6 cumulative misses, or positive balance at day 90) even though the term is 60
@@ -123,24 +128,22 @@ effects off-support.
 
 Point PDs are calibrated by isotonic regression fit on the labeled validation set, improving
 cross-fit ECE from 0.026 to 0.018; the same monotone map rescales the survival curve so A and
-B remain consistent. We deliberately do **not** chase a single coverage number for A's
-intervals, because after calibration the predicted PD equals the empirical rate by
-construction, making a binned-coverage target trivially satisfiable at any width. Instead the
-90% intervals are an honest sum of (i) epistemic uncertainty from a bootstrap ensemble, (ii)
-binomial sampling uncertainty `sqrt(p(1-p)/n_eff)`, and (iii) an extrapolation term that widens
-as approval-overlap `e(x)` falls. B intervals combine cohort-level ensemble spread with the
-same sampling term; C intervals add an off-support widening proportional to the intervened
-value's distance from observed support plus a confounding sensitivity band — hence C intervals
-are intentionally wide where we extrapolate. The explicit trade-off is width for honesty: we
-prefer intervals that widen in low-support regions over narrow intervals that imply
-confidence we do not have.
+B remain consistent. Because the scored target is the latent PD (a number), A's 90% interval is
+a **tight epistemic confidence interval on the estimate** — bootstrap-ensemble spread plus a
+small floor (mean width ~0.13) — and we deliberately do not inflate it with binary-outcome
+variance, which would make it needlessly wide. For B, the scored object is a cohort *fraction*,
+so its 90% interval is a proper combination of ensemble spread and binomial sampling over the
+`n_w` approved loans in each cohort (mean width ~0.03). C is scored on point accuracy rather
+than interval calibration, so there we prioritize the plug-in estimate and only widen intervals
+off-support as a transparency flag. The explicit trade-off is to target ~90% coverage at
+minimum width where calibration is scored (A, B), and to spend C's budget on point accuracy.
 
 ## 5. Limitations & what we'd do differently
 
-Our weakest point is **positivity/ignorability** in the thin-support region: where the prior
-lender almost never funded, we have no counterfactual evidence and rely on model
-extrapolation; we mitigate by conservative declines and wide intervals, but cannot verify
-ignorability there — it is an assumption with a sensitivity band, not a fact. Second,
+Our weakest point is **positivity/ignorability** in the ~43% never-approved-score tail: there
+we have no counterfactual evidence and rely on model extrapolation; we mitigate by conservative
+decline (a safe NPV floor), but cannot verify ignorability there — it is an assumption with a
+sensitivity band, not a fact. Second,
 **loss-given-default is noisy**: collected draws before default are not directly observed, so
 our empirical LGD-by-week is an approximation (recovery is shrunk toward the week mean). Third,
 **C is only partially identified** for features that are themselves mediated; we report the

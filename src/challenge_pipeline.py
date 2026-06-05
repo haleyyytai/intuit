@@ -274,8 +274,10 @@ def main():
     enpv = econ.expected_npv(dec_df["requested_amount"].to_numpy(), H_cal, lgd_week)
     decision = (enpv > 0).astype(int)
 
-    # interval: epistemic (ensemble) + binomial sampling + extrapolation (low overlap)
-    half = 1.645 * pd_sd + binom_half(pd_pt) + 0.15 * (1 - e_dec)
+    # interval: TIGHT epistemic CI on the PD estimate (S_cal penalizes needless width).
+    # truth = the latent PD (a number) -> width reflects model/estimation uncertainty
+    # (bootstrap ensemble spread) + a small floor, not binary-outcome variance.
+    half = 1.645 * pd_sd + 0.02
     pd_lo = np.clip(pd_pt - half, 0, 1)
     pd_hi = np.clip(pd_pt + half, 0, 1)
     A = pd.DataFrame({"applicant_id": dec_df["applicant_id"], "decision": decision,
@@ -301,9 +303,12 @@ def main():
         curve = cdr_cal[idx].mean(axis=0)                    # calibrated (13,)
         per_model_curve = np.array([cm[idx].mean(axis=0) for cm in cdr_per_model])  # (K,13)
         sd = per_model_curve.std(axis=0)
+        nw = len(idx)                                        # approved loans in this cohort
         curve = np.maximum.accumulate(np.clip(curve, 0, 1))  # enforce monotone
         for a in range(1, N_WEEKS + 1):
-            pt = float(curve[a - 1]); h = float(1.645 * sd[a - 1] + binom_half(curve[a - 1]) / 3)
+            pt = float(curve[a - 1])
+            # proper 90% interval on the cohort fraction: epistemic + binomial sampling over n_w
+            h = float(1.645 * np.sqrt(sd[a - 1] ** 2 + pt * (1 - pt) / max(nw, 1)))
             rows.append({"cohort_week": w, "loan_age_weeks": a,
                          "cumulative_default_rate": pt,
                          "cdr_lower_90": max(0.0, pt - h), "cdr_upper_90": min(1.0, pt + h)})
