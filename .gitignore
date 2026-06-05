@@ -1,0 +1,19 @@
+# Data (often too large / not redistributable — keep out of git)
+data/*
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Generated output artifacts (keep dir structure via .gitkeep, ignore contents)
+outputs/figures/*
+outputs/tables/*
+outputs/causal_graph/*
+outputs/predictions/*
+!outputs/**/.gitkeep
+
+# macOS
+.DS_Store

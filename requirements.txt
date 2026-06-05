@@ -1,0 +1,30 @@
+# Core
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+scikit-learn>=1.4
+matplotlib>=3.8
+seaborn>=0.13
+pyarrow>=15.0            # parquet I/O
+
+# Gradient-boosted baselines
+lightgbm>=4.3
+xgboost>=2.0
+
+# Causal discovery / inference (balanced-hybrid stack)
+tigramite>=5.2           # PCMCI / PCMCI+ time-series causal discovery
+statsmodels>=0.14        # VAR, Granger, OLS, quantile regression
+networkx>=3.2            # DAG representation / plotting
+dowhy>=0.11              # causal effect estimation + refutation
+econml>=0.15             # double ML / causal forests (optional, heavier)
+
+# Uncertainty quantification
+mapie>=0.8               # conformal prediction intervals
+
+# Explainability
+shap>=0.45
+
+# Reproducibility / utilities
+pyyaml>=6.0
+tqdm>=4.66
+joblib>=1.3
