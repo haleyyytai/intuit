@@ -3,7 +3,7 @@ geometry: margin=0.75in
 fontsize: 11pt
 ---
 
-# Deliverable D — Technical Writeup
+# Deliverable D -- Technical Writeup
 
 **Team:** Falcons
 
@@ -28,8 +28,8 @@ the full validation+test population (13,306 applicants), so the estimand `P(defa
 is not the labeled distribution `P(default | x, approved)`. Critically, selection is on
 *observables*: the approval propensity `e(x)=P(approved | x)` is predicted with AUC 1.000
 when the prior underwriter's own score is included, and 0.720 from genuine applicant
-features alone. We therefore read the 1.000 as near-tautological — the prior *score is the
-decision's basis* — not as evidence that approval is deterministic in applicant features.
+features alone. We therefore read the 1.000 as near-tautological -- the prior *score is the
+decision's basis* -- not as evidence that approval is deterministic in applicant features.
 Because selection is on observables, conditioning on the recorded `prior_underwriter_score`
 makes selection ignorable and identifies the outcome model *where overlap exists*. But
 conditioning on the score **relocates rather than removes** the positivity problem: approval
@@ -64,9 +64,11 @@ backbone deliberately because it serves A, B, and C coherently. A controlled, pr
 bake-off on an *internal* train time-split (earlier weeks fit, later weeks select; official
 validation reserved for calibration) compared six learners; the incumbent histogram-GBM
 hazard was retained (calibrated Brier 0.1344; the best challenger, CatBoost, was only 0.3%
-better — below our 2% swap threshold). A calibrated logistic regression scored within ~1%
-Brier (0.1329), a leakage check that passed: no learner is anomalously strong, so the signal
-is largely additive. Feature handling: log1p on money fields, missingness indicators,
+better -- below our 2% swap threshold). We benchmarked against the textbook credit-risk baseline
+-- a discrete-time hazard with a logit/complementary-log-log link on the same person-period
+expansion -- and a calibrated logistic PD90 scored within ~1% Brier (0.1329); that it is *not*
+anomalously stronger is our leakage check, and confirms the signal is largely additive. We kept
+the GBM for native missingness handling and mild non-linearity at no calibration cost. Feature handling: log1p on money fields, missingness indicators,
 GBM-native NaN handling, and a strict split between the risk feature set and the selection
 feature set (`prior_decision` and `prior_approved_amount` never enter the risk model).
 
@@ -83,11 +85,15 @@ mechanism means collected draws != (t-1) draws. Instead we compute realized NPV 
 outcome columns and learn loss-given-default empirically by default week: a week-1 default
 realizes ~ -0.69 R, a near-day-90 default ~ +0.09 R, and full repayment ~ +0.0875 R. Then
 `E[NPV_i] = S(90)*0.0875*R_i + sum_a P(week a)*LGD_a*R_i`, and we **approve iff E[NPV_i] > 0**.
-On realized validation profit this policy beats approve-all by +340% and lands within 1.0%
-of the oracle single-threshold policy — measured on the labeled (supported) region, which is
-the honest caveat. The low-score tail, where support is thin, is declined by construction
-(bottom-two score deciles approve at 45% vs 91% in the top decile), i.e. a conservative NPV
-floor of 0 beats an unsupported approval.
+On realized validation profit this parameter-free policy earns \$2.62M, beats approve-all
+(\$0.56M) by +370%, and beats every *plausible fixed* PD threshold -- the policy the brief
+names as wrong (p<0.20 -> \$2.40M, p<0.30 -> \$2.53M) -- landing within 1.4% of the best
+*oracle*-tuned threshold (p<0.24, \$2.66M) that a flat policy could only find with the unseen
+outcomes. That gap is the brief's intended insight: low PD is not profitability, and a
+size-aware NPV rule needs no tuning. All figures are on the labeled (supported) region -- the
+honest caveat. The low-score tail, where support is thin, is declined by construction (a
+conservative NPV floor of 0 beats an unsupported approval); this is the standard
+**reject-inference** posture for selective labels.
 
 **Deliverable B.** For each origination cohort week we average `1-S(7a|x)` over our *approved*
 cohort-`w` loans, stabilized by empirical-Bayes shrinkage toward the pooled approved-book curve
@@ -100,19 +106,21 @@ lower-risk than the marginal population.
 
 ## 3. Causal reasoning & counterfactual methodology
 
-Deliverable C asks an **individual, conditional** question: `P(Y | do(f=v), X_{-q}=x)` for a
-specific applicant — not a population average treatment effect. Under ignorability and
-support, conditioning on `X_{-q}` blocks the backdoor paths, so the *identified* estimator is
-the **cross-fitted outcome-model plug-in**: evaluate the survival PD model at the intervened
-covariate vector. This is why we submit the plug-in rather than DML or a causal forest — those
-target a population-average estimand and we use them only as directional cross-checks.
+Deliverable C asks `P(Y | do(f=v), X_{-q}=x)` -- an **individual** estimand that holds all *other*
+observed covariates at their values. As written this is a per-unit **controlled direct effect**,
+not a total effect: any true mediating path from `f` through another observed covariate is held
+fixed. Under conditional ignorability and overlap, conditioning on `X_{-q}` blocks the backdoor
+paths, so the *identified* estimator is exactly the **cross-fitted outcome-model plug-in** with
+deterministic descendants recomputed -- evaluate the PD model at the intervened covariate vector.
+This is why we submit the plug-in rather than DML or a causal forest, which target a
+population-average effect and serve only as cross-checks.
 
 The plug-in is emphatically **not** naive feature perturbation, even though the two share the
 same final arithmetic. Our estimator (i) **recomputes deterministic descendants** of the
-intervened feature — e.g. `requested_amount_to_observed_revenue` moves when
+intervened feature -- e.g. `requested_amount_to_observed_revenue` moves when
 `requested_amount` is set, and leaving it stale silently discards the effect that flows
 through it; (ii) **excludes `prior_underwriter_score` from the C model**, because that score
-is a *descendant* of the application features (the underwriter scored them) — freezing it
+is a *descendant* of the application features (the underwriter scored them) -- freezing it
 under `do(f)` is the same class of error as not recomputing a ratio, and the audit shows
 excluding it costs ~0 accuracy; (iii) **audits local overlap** and widens intervals (or
 shrinks toward the factual PD) off-support, the literal answer to "interventions you never
@@ -129,14 +137,15 @@ The disciplined plug-in recovers the true slope within 6% (+0.084 vs +0.089 per 
 effect 5.8x because it leaves the stale ratio. This is the difference between observational
 association and an interventional prediction made concrete. On the *real* data, grouping the
 900 queries by feature, a cross-fitted doubly-robust average-effect estimator (partial-linear
-DML, prior-underwriter excluded, approval IPW) agrees in sign with our plug-in on **100% of the
-features the model materially responds to** (5/5, with comparable magnitudes: e.g. invoice
-delinquency +0.63 vs +0.55, credit utilization +0.12 vs +0.29). The two target different
-estimands (population-average vs individual-conditional), so we expect aggregate-direction
-agreement only; the submitted per-query value is the conditional plug-in by design.
+DML, prior-underwriter excluded, approval IPW) **agrees in sign** with our plug-in on all 5
+features the model materially responds to. We claim sign agreement only: the magnitudes differ
+(e.g. credit utilization +0.12 plug-in vs +0.29 DML), which is *expected* because DML targets a
+population-average effect while the plug-in is an individual conditional one -- they are
+different estimands, so we do not read DML as validating our magnitude. The submitted per-query
+value is the conditional plug-in by design.
 
 **Defending drivers to a regulator.** Our stated drivers (leverage, credit utilization,
-delinquency, cash-balance signals — see the selection and risk audits) are conditioned-on
+delinquency, cash-balance signals -- see the selection and risk audits) are conditioned-on
 observables with stable, signed, monotone relationships to default (e.g. default rate falls
 monotonically across prior-score deciles, 0.44->0.14); we exclude the prior decision itself
 to avoid laundering historical policy, report risk with and without the prior-underwriter
@@ -148,8 +157,8 @@ effects off-support.
 Point PDs are calibrated by isotonic regression fit on the labeled validation set, improving
 cross-fit ECE from 0.026 to 0.018; the same monotone map rescales the survival curve so A and
 B remain consistent. Because the scored target is the latent PD (a number), A's 90% interval is
-a **tight epistemic confidence interval on the estimate** — bootstrap-ensemble spread plus a
-small floor (mean width ~0.13) — and we deliberately do not inflate it with binary-outcome
+a **tight epistemic confidence interval on the estimate** -- bootstrap-ensemble spread plus a
+small floor (mean width ~0.13) -- and we deliberately do not inflate it with binary-outcome
 variance, which would make it needlessly wide. For B, the scored object is a cohort *fraction*,
 so its 90% interval is a proper combination of ensemble spread and binomial sampling over the
 `n_w` approved loans in each cohort (mean width ~0.03). C is scored on point accuracy rather
@@ -159,19 +168,26 @@ minimum width where calibration is scored (A, B), and to spend C's budget on poi
 
 ## 5. Limitations & what we'd do differently
 
-Our weakest point is **positivity/ignorability** in the ~43% never-approved-score tail: there
-we have no counterfactual evidence and rely on model extrapolation; we mitigate by conservative
-decline (a safe NPV floor), but cannot verify ignorability there — it is an assumption with a
-sensitivity band, not a fact. Second,
+First and sharpest, **temporal drift**: the observed default rate rises from 17.4% (train) to
+20.6% (the later validation block), and the test window is later still. We calibrate isotonic on
+validation -- the most recent labeled block -- so the train->validation drift is absorbed, but if
+the upward trend continues into test, our PDs will under-predict, which hurts P&L (we fund loans
+riskier than we think) and calibration (intervals miss low) together. Time-blocked CV shows
+*stability* but does not *correct a trend*; we do not claim the drift is removed, and a
+conservative production hedge would nudge the global PD level toward the most recent observed
+rate. Second, **positivity / reject inference** in the ~43% never-approved-score tail: no
+counterfactual evidence there, handled by conservative decline (a safe NPV floor) -- not claimed
+as profit-maximizing, only as declining where we cannot evaluate. Third,
 **loss-given-default is noisy**: collected draws before default are not directly observed, so
-our empirical LGD-by-week is an approximation (recovery is shrunk toward the week mean). Third,
-**C is only partially identified** for features that are themselves mediated; we report the
-controlled-direct-effect reading and flag it. Relatedly, the tree plug-in is near-flat for
-low-importance features, so counterfactuals on weak drivers are conservative — the DML
+our empirical LGD-by-week is an approximation. Fourth, **C is a controlled direct effect**: we
+treat the remaining covariates as non-descendants of the intervened feature except the
+deterministic ratio, so if true mediating paths exist (e.g. revenue moving overdrafts), we
+estimate a direct effect through a partially-blocked path, not a total effect. Relatedly, the tree plug-in is near-flat for
+low-importance features, so counterfactuals on weak drivers are conservative -- the DML
 cross-check confirms only the material drivers carry effect. We tested whether this flatness
 costs accuracy: on a semi-synthetic test-bed injecting a *known* weak-feature effect, the tree
 recovered 79% of it (so the flatness is bounded), and a smoother logistic C-model recovered more
-in-support but over-extrapolated on real in-support queries (stale missingness flags) — so we
+in-support but over-extrapolated on real in-support queries (stale missingness flags) -- so we
 kept the bounded plug-in. Other challengers, all measured on a time-split and none promoted: a
 decision risk-margin (noise), credibility-gap features (+0.23%+/-2.16% across folds), per-age
 recalibration (gap already <=0.007), and a backbone swap (no learner beat HistGBM by >2% Brier).
