@@ -5,7 +5,7 @@ fontsize: 11pt
 
 # Deliverable D - Technical Writeup
 
-**Team:** Falcons
+**Team:** the-prior-distribution-1
 
 ## 1. Problem framing & assumptions violated
 

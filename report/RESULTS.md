@@ -214,7 +214,7 @@ mean 0.95->0.92). Per "reject if weird real-query predictions like 0.95" -> KEEP
 D rewrite (S_write): added flat-threshold baseline; cloglog/logistic-hazard textbook baseline;
 softened "100% DML" to sign-only (magnitudes diverge, different estimands); C framed as a
 controlled direct effect; reject-inference term; TEMPORAL DRIFT limitation (17.4%->20.6%, test
-later, conservative hedge); non-descendant assumption. 4 pages, PASS, team=Falcons.
+later, conservative hedge); non-descendant assumption. 4 pages, PASS, team=the-prior-distribution-1.
 
 **Final tally: 19 checks. A/B/C unchanged (golden); D substantially strengthened.**
 
