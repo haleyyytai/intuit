@@ -5,7 +5,7 @@ fontsize: 11pt
 
 # Deliverable D — Technical Writeup
 
-**Team:** _TEAM NAME_
+**Team:** Falcons
 
 **Scoring alignment.** For S_P&L we approve by expected NPV under the official economics
 rather than a PD threshold; for S_traj the same weekly survival system forecasts our own
@@ -168,8 +168,10 @@ our empirical LGD-by-week is an approximation (recovery is shrunk toward the wee
 **C is only partially identified** for features that are themselves mediated; we report the
 controlled-direct-effect reading and flag it. Relatedly, the tree plug-in is near-flat for
 low-importance features, so counterfactuals on weak drivers are conservative — the DML
-cross-check confirms only the material drivers carry effect, but a generator with small true
-effects on weak features would expose this. With another day we would: use a smoother outcome
-model (or monotone splines) so weak-feature counterfactuals are not flattened; tighten C
-intervals on high-overlap queries via conformalized quantile regression; and extend the
-DML/causal-survival-forest cross-check to per-feature heterogeneity rather than average slope.
+cross-check confirms only the material drivers carry effect. We tested whether this flatness
+costs accuracy: on a semi-synthetic test-bed injecting a *known* weak-feature effect, the tree
+recovered 79% of it (so the flatness is bounded), and a smoother logistic C-model recovered more
+in-support but over-extrapolated on real in-support queries (stale missingness flags) — so we
+kept the bounded plug-in. Other challengers, all measured on a time-split and none promoted: a
+decision risk-margin (noise), credibility-gap features (+0.23%+/-2.16% across folds), per-age
+recalibration (gap already <=0.007), and a backbone swap (no learner beat HistGBM by >2% Brier).
