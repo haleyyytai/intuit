@@ -182,7 +182,9 @@ low-importance features, so counterfactuals on weak drivers are conservative -- 
 cross-check confirms only the material drivers carry effect. We tested whether this flatness
 costs accuracy: on a semi-synthetic test-bed injecting a *known* weak-feature effect, the tree
 recovered 79% of it (so the flatness is bounded), and a smoother logistic C-model recovered more
-in-support but over-extrapolated on real in-support queries (stale missingness flags) -- so we
-kept the bounded plug-in. Other challengers, all measured on a time-split and none promoted: a
+on the test-bed but over-extrapolated on the *real* in-support queries (PD ~0.91 under revenue
+interventions for feed and no-feed applicants alike -- linear extrapolation off the data
+manifold, not a missingness-flag artifact), which is *further* from plausible truth than the
+bounded tree -- so we kept the tree plug-in. Other challengers, all measured on a time-split and none promoted: a
 decision risk-margin (noise), credibility-gap features (+0.23%+/-2.16% across folds), per-age
 recalibration (gap already <=0.007), and a backbone swap (no learner beat HistGBM by >2% Brier).

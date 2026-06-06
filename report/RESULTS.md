@@ -225,3 +225,21 @@ cross-validated 5 ways twice on the labeled training set:
 - No strategy decision changes; confidence raised.
 
 **Final tally: 20 checks.**
+
+---
+
+## 21. Definitive logistic-C verification (the critique's "fixable __isna bug")
+Tested the critique's exact hypothesis that the logistic-C over-extrapolation is a stale
+missingness-flag bug fixable under do():
+- CLAIM CHECK: after do(observed_monthly_revenue), its `__isna` flag = **0.00** (build_features
+  already recomputes it). There is NO stale flag -> the hypothesis is empirically FALSE.
+- Over-extrapolation hits feed-applicants (PD 0.911) AND no-feed (0.935) **equally** -> it is
+  fundamental linear extrapolation off the data manifold, not an ill-posed/no-feed artifact.
+- S_C implication: on real in-support (moderate-effect) queries, logistic's ~0.91 is FURTHER
+  from plausible truth than the tree's attenuated estimate. The tree's "38% strong recovery"
+  is a small absolute error on moderate effects; logistic's blow-up is a large one.
+- **Verdict (now mechanism-verified): keep HistGBM-C -- it is the better S_C choice on these
+  queries, not merely the safer one.** Corrected D + RESULTS #18 (root cause was mis-stated as
+  "stale flags"; it is linear extrapolation).
+
+**Final tally: 21 checks. Model FROZEN; A/B/C = golden.**
