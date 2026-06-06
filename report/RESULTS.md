@@ -1,5 +1,11 @@
 # Recorded Results — all checks & experiments
 
+> **Canonical P&L story (final, post-economics-alignment):** E[NPV] **$2.62M** vs approve-all
+> **$0.56M** (+370%); fixed thresholds p<0.20 $2.40M / p<0.30 $2.53M; oracle p<0.24 **$2.66M**
+> (E[NPV] within **1.4%**, parameter-free). Entries #6/#7 below are earlier diagnostic runs
+> ($2.68M) made before the t>60 cap alignment; #19 is authoritative.
+
+
 Every measurement we ran, what it tested, the number, and the decision. **14 checks total.**
 Adopted = changed the submission; Rejected/No-change = baseline kept (negative results are
 credibility, not failure). All on real challenge data unless noted.

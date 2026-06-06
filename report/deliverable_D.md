@@ -28,10 +28,12 @@ Because selection is on observables, conditioning on the recorded `prior_underwr
 makes selection ignorable and identifies the outcome model *where overlap exists*. But
 conditioning on the score **relocates rather than removes** the positivity problem: approval
 is a near-deterministic threshold on that score, so in the feature space the A/B model
-actually conditions on, ~43% of the decision set falls in a never-approved score range with no
-labeled analogs (`e(x)<0.05` for 0.43 of applicants). No reweighting fixes this; we handle it
-by **conservative decline** of that tail (§2), a safe NPV floor of 0 instead of an approval
-extrapolated past the data. Dropping the score would restore positivity but reintroduce it as
+actually conditions on, ~43% of the decision set lies in a thin-support prior-score region with
+little labeled approved analog (`e(x)<0.05`). No reweighting fixes this; we do **not** claim all
+of these applicants are automatically declined -- the E[NPV] rule approves only where the
+supported observed features justify positive value and declines the rest, so the final book
+approves about two-thirds of applicants overall and avoids unsupported aggressive approvals in
+the weakest-support region. Dropping the score would restore positivity but reintroduce it as
 *omitted confounding*, since the underwriter's signal would then be unobserved. We therefore
 state ignorability-given-the-score as an *assumption* (the underwriter may also have used
 private signal), backed by the §3 sensitivity analysis, not as a fact proven by the propensity
@@ -58,11 +60,13 @@ backbone deliberately because it serves A, B, and C coherently. A controlled, pr
 bake-off on an *internal* train time-split (earlier weeks fit, later weeks select; official
 validation reserved for calibration) compared six learners; the incumbent histogram-GBM
 hazard was retained (calibrated Brier 0.1344; the best challenger, CatBoost, was only 0.3%
-better -- below our 2% swap threshold). We benchmarked against the textbook credit-risk baseline
--- a discrete-time hazard with a logit/complementary-log-log link on the same person-period
-expansion -- and a calibrated logistic PD90 scored within ~1% Brier (0.1329); that it is *not*
-anomalously stronger is our leakage check, and confirms the signal is largely additive. We kept
-the GBM for native missingness handling and mild non-linearity at no calibration cost. Feature handling: log1p on money fields, missingness indicators,
+better -- below our 2% swap threshold). A calibrated binary logistic PD90 scored within ~1%
+Brier (0.1329) and serves as our simple-model leakage check: it is *not* anomalously stronger,
+so the signal is largely additive. The natural production credit-risk baseline would be a pooled
+logistic or complementary-log-log discrete-time hazard on the same person-period expansion; we
+did not run it in this time-boxed setting and retained the HistGBM hazard, which directly models
+timing, handles informative missingness natively, and which no challenger cleared the 2% bar to
+displace. Feature handling: log1p on money fields, missingness indicators,
 GBM-native NaN handling, and a strict split between the risk feature set and the selection
 feature set (`prior_decision` and `prior_approved_amount` never enter the risk model).
 
@@ -153,7 +157,9 @@ cross-fit ECE from 0.026 to 0.018; the same monotone map rescales the survival c
 B remain consistent. Because the scored target is the latent PD (a number), A's 90% interval is
 a **tight epistemic confidence interval on the estimate** -- bootstrap-ensemble spread plus a
 small floor (mean width ~0.13) -- and we deliberately do not inflate it with binary-outcome
-variance, which would make it needlessly wide. For B, the scored object is a cohort *fraction*,
+variance, which would make it needlessly wide. On the late time-split this width achieved exactly
+0.900 binned coverage at the minimum tested safe setting; tightening (x0.75) under-covered (0.70)
+and widening (x1.25) only added width (1.00). For B, the scored object is a cohort *fraction*,
 so its 90% interval is a proper combination of ensemble spread and binomial sampling over the
 `n_w` approved loans in each cohort (mean width ~0.03). C is scored on point accuracy rather
 than interval calibration, so there we prioritize the plug-in estimate and only widen intervals
@@ -170,9 +176,10 @@ riskier than we think) and calibration (intervals miss low) together. 5-fold CV 
 time-blocked) shows the backbone is *stable* (AUC 0.77 +/- 0.01 both ways) but does not *correct
 a trend* -- the latest rolling folds are measurably harder (Brier ~0.11 -> 0.13). We do not claim
 the drift is removed; a conservative production hedge would nudge the global PD level toward the
-most recent observed rate. Second, **positivity / reject inference** in the ~43% never-approved-score tail: no
-counterfactual evidence there, handled by conservative decline (a safe NPV floor) -- not claimed
-as profit-maximizing, only as declining where we cannot evaluate. Third,
+most recent observed rate. Second, **positivity / reject inference**: ~43% of the decision set is a thin-support prior-score
+region with little labeled analog; the E[NPV] rule declines its weakest-support part (the book
+approves ~2/3 overall) -- not claimed as profit-maximizing, only as declining where we cannot
+evaluate. Third,
 **loss-given-default is noisy**: collected draws before default are not directly observed, so
 our empirical LGD-by-week is an approximation. Fourth, **C is a controlled direct effect**: we
 treat the remaining covariates as non-descendants of the intervened feature except the
