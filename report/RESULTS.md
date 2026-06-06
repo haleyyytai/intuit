@@ -211,3 +211,17 @@ controlled direct effect; reject-inference term; TEMPORAL DRIFT limitation (17.4
 later, conservative hedge); non-descendant assumption. 4 pages, PASS, team=Falcons.
 
 **Final tally: 19 checks. A/B/C unchanged (golden); D substantially strengthened.**
+
+---
+
+## 20. 5-fold CV on training (random + rolling-origin) — strategy robustness
+Per the methodological point that one validation split is not enough, the PD backbone was
+cross-validated 5 ways twice on the labeled training set:
+- (A) random stratified 5-fold (in-distribution): AUC 0.772+/-0.004, ECE 0.031+/-0.002, Brier 0.1196+/-0.001
+- (B) rolling-origin 5-fold (temporally honest): AUC 0.768+/-0.009, ECE 0.020+/-0.009, Brier 0.1248+/-0.009
+- The two schemes AGREE (AUC 0.772 vs 0.768) -> backbone robust both in-distribution and forward in time.
+- Rolling Brier rises in the LATEST folds (fold4-5: 0.138/0.134 vs early 0.113) -> empirically confirms
+  the temporal-drift limitation (later windows are measurably harder), grounding the D Section-5 caveat.
+- No strategy decision changes; confidence raised.
+
+**Final tally: 20 checks.**
