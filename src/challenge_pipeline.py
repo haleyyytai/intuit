@@ -276,8 +276,9 @@ def main():
 
     # interval: TIGHT epistemic CI on the PD estimate (S_cal penalizes needless width).
     # truth = the latent PD (a number) -> width reflects model/estimation uncertainty
-    # (bootstrap ensemble spread) + a small floor, not binary-outcome variance.
-    half = 1.645 * pd_sd + 0.02
+    # (bootstrap ensemble spread) + a small floor. Diagnostics show binned coverage is
+    # 100% even at width 0.078, so we use a small floor (0.01) to stay near 90% at min width.
+    half = 1.645 * pd_sd + 0.01
     pd_lo = np.clip(pd_pt - half, 0, 1)
     pd_hi = np.clip(pd_pt + half, 0, 1)
     A = pd.DataFrame({"applicant_id": dec_df["applicant_id"], "decision": decision,

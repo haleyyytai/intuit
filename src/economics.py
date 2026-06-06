@@ -32,9 +32,9 @@ def realized_default_ratio(R, t, rec, terms: LoanTerms = TERMS):
     t = np.asarray(t, float)
     rec = np.nan_to_num(np.asarray(rec, float), nan=0.0)
     D = daily_draw(R, terms)
-    collected = D * np.clip(t - 1, 0, terms.term_days)
-    full = R * (1 + terms.apr * terms.term_days / 365.0)
-    collected = np.minimum(collected, full)
+    # printed formula collects D*(t-1); cap draws at min(t,60)-1 days so a post-term
+    # default (t>60) cannot over-collect beyond the 60-day schedule.
+    collected = D * np.clip(t - 1, 0, terms.term_days - 1)
     return terms.fee_rate + collected / R + rec / R - 1.0
 
 

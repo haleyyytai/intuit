@@ -7,6 +7,14 @@ fontsize: 11pt
 
 **Team:** _TEAM NAME_
 
+**Scoring alignment.** For S_P&L we approve by expected NPV under the official economics
+rather than a PD threshold; for S_traj the same weekly survival system forecasts our own
+approved book's default trajectory; for S_cal we target 90% coverage at minimum width via
+isotonic calibration and empirical intervals; for S_C we use a disciplined plug-in
+(deterministic descendants recomputed, local overlap checks, prior-underwriter excluded from
+the primary model); for S_write we state the selective-label and positivity assumptions
+explicitly.
+
 ## 1. Problem framing & assumptions violated
 
 We are a small-business lender choosing whom to fund to maximize portfolio NPV, not
