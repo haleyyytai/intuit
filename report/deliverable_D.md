@@ -61,12 +61,13 @@ bake-off on an *internal* train time-split (earlier weeks fit, later weeks selec
 validation reserved for calibration) compared six learners; the incumbent histogram-GBM
 hazard was retained (calibrated Brier 0.1344; the best challenger, CatBoost, was only 0.3%
 better -- below our 2% swap threshold). A calibrated binary logistic PD90 scored within ~1%
-Brier (0.1329) and serves as our simple-model leakage check: it is *not* anomalously stronger,
-so the signal is largely additive. The natural production credit-risk baseline would be a pooled
-logistic or complementary-log-log discrete-time hazard on the same person-period expansion; we
-did not run it in this time-boxed setting and retained the HistGBM hazard, which directly models
-timing, handles informative missingness natively, and which no challenger cleared the 2% bar to
-displace. Feature handling: log1p on money fields, missingness indicators,
+Brier (0.1329) and serves as our simple-model leakage check (not anomalously stronger, so the
+signal is largely additive). We also ran the textbook credit-risk baseline -- pooled logit and
+complementary-log-log discrete-time hazards on the same person-period expansion: as the
+literature predicts they are marginally better *calibrated* (cloglog cal-Brier 0.1329 / ECE 0.036
+vs the GBM's 0.1344 / 0.038), but by only ~1% relative, below our 2% swap bar, so we retained the
+HistGBM hazard (which additionally handles informative missingness natively and mild
+non-linearity), with the GLM hazard as our calibrated reference baseline. Feature handling: log1p on money fields, missingness indicators,
 GBM-native NaN handling, and a strict split between the risk feature set and the selection
 feature set (`prior_decision` and `prior_approved_amount` never enter the risk model).
 
