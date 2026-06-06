@@ -163,8 +163,8 @@ floors (interval floor 0.01). No grid search on official validation.
 
 ### Headline (what shipped)
 - **Validator: PASS, 0 errors, 0 warnings.**
-- **A:** PD AUC ~0.77 (0.771 ± 0.008 over rolling folds); ECE 0.018; interval coverage 0.90–0.93;
-  **E[NPV] policy: +340% vs approve-all, within 1.0% of the oracle threshold** (realized validation).
+- **A:** PD AUC ~0.77 (5-fold CV: random 0.772±0.004, rolling 0.768±0.009); ECE 0.018; coverage 0.90–0.93;
+  **E[NPV] policy: $2.62M, +370% vs approve-all, beats every fixed threshold, within 1.4% of oracle** (realized validation).
 - **B:** 169-row monotone grid; per-age calibration gap <= 0.007; week-13 CDR ~14%.
 - **C:** plug-in recovers a known synthetic effect within 6% (slope +0.084 vs truth +0.089),
   **7.2x closer to truth than naive** (MAE 0.018 vs 0.130); 100% DML sign agreement on material features.
@@ -180,7 +180,8 @@ lightgbm-hazard 0.1376 | lightgbm-binary 0.1398. No challenger > 2% better -> in
 
 ### Economics / decision
 - LGD by week: w1 -0.69R, w6 -0.21R, w13 +0.09R; repaid +0.0875R.
-- Realized validation profit: our E[NPV] $2.68M vs approve-all $0.61M (+340%); oracle $2.70M.
+- Realized validation profit: our E[NPV] $2.62M vs approve-all $0.56M (+370%); fixed thresholds p<0.20 $2.40M /
+  p<0.30 $2.53M; oracle p<0.24 $2.66M (E[NPV] within 1.4%, parameter-free).
 - Lambda sweep: lambda=0 best ($2.678M); 0.005R +0.06% (noise); 0.01R/0.02R worse -> keep 0.
 
 ### Calibration / intervals
@@ -191,17 +192,37 @@ lightgbm-hazard 0.1376 | lightgbm-binary 0.1398. No challenger > 2% better -> in
 - Baseline: AUC 0.771±0.008, ECE 0.018±0.007, traj_MAE 0.017±0.006, coverage 0.93±0.05, approve 0.82±0.02.
 - E6 credibility features: +0.00% / -2.30% / +2.97% -> **+0.23% ± 2.16%** (single-split -1.82% was noise) -> reject.
 
-### Experiment tally (15 checks)
-6 adopted · 5 rejected/no-change · 2 audits · 1 model-selection · 1 deferred.
-Adopted: economics fix, isotonic calibration, A/B/C interval methods, EB shrinkage, overlap-C.
-Rejected/no-change: lambda margin (E2), per-age recalibration (E3, already good), credibility
-features (E6), daily timing (E1 deferred), backbone swap (bake-off).
+### Additional checks (#16-20) — see RESULTS.md for full numbers
+- **#16 real-data perturbation sanity**: sweep a feature on real validation applicants -> 7/8 move the
+  economically correct direction (the miss is a flat weak feature).
+- **#18 T1 weak-feature gate + T2 logistic-C**: tree recovers 79% of a known weak effect (flatness cheap);
+  logistic-C recovers better on synthetic but OVER-extrapolates on real in-support queries (revenue->0.92,
+  even with the bank-feed consistency fix) -> **rejected, kept golden HistGBM-C**.
+- **#19 flat-threshold baseline**: E[NPV] $2.62M beats every fixed PD threshold (p<0.20->$2.40M, p<0.30->$2.53M),
+  within 1.4% of the oracle threshold (p<0.24, $2.66M) -> the brief's named-wrong policy, quantified.
+- **#20 5-fold CV on training** (random + rolling-origin): backbone robust both ways (AUC 0.772 vs 0.768);
+  rolling Brier rises in latest folds (0.11->0.13) -> empirically confirms temporal drift.
+
+### Experiment tally (20 checks)
+~7 adopted · ~6 rejected/no-change · 2 audits · 1 model-selection · 1 deferred · 3 validation-only.
+Adopted: economics fix, isotonic calibration, A/B/C interval methods, EB shrinkage, overlap-C, flat-threshold
+baseline (into D), D framing/score-alignment.
+Rejected/no-change: lambda margin (E2), per-age recalibration (E3), credibility features (E6), daily timing
+(E1 deferred), backbone swap (bake-off), **logistic-C challenger (T2, over-extrapolates)**.
+Model FROZEN; A/B/C = golden; D substantially strengthened.
 
 ---
 
 ## 5. Honest limitations
+- **Temporal drift (sharpest)**: default rate rises 17.4% (train) -> 20.6% (validation); test is later still.
+  We calibrate isotonic on validation (most recent labeled block) so train->val drift is absorbed, but the
+  val->test residual is uncorrectable without assuming the trend continues. 5-fold rolling CV shows the
+  latest folds are measurably harder (Brier 0.11->0.13). Flagged in D §5; a production hedge would nudge the
+  global PD toward the most recent observed rate.
 - **Positivity** in the ~43% never-approved-score tail (conditioning on the prior score): no
-  counterfactual evidence there; handled by conservative decline; ignorability is an assumption.
+  counterfactual evidence there; handled by conservative decline (reject inference); ignorability is an assumption.
+- **C is a controlled direct effect** (not total): remaining covariates treated as non-descendants except the
+  deterministic ratio; if true mediating paths exist, our estimate blocks them.
 - **LGD** uses week-average recovery (collected draws not directly observed; cure mechanism approximated).
 - **C plug-in is near-flat on low-importance features** (tree gradient ~0); material drivers are captured.
 - **Reported metrics are on the supported (approved) region**; the true test S_P&L is scored by Intuit
