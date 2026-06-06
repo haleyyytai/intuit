@@ -156,3 +156,19 @@ on real data) -> checks RESPONSE DIRECTION only.
   a sign error. Combined with #4 (synthetic accuracy) and #5 (DML), causal C is validated 3 ways.
 
 **Updated tally: 16 checks.**
+
+---
+
+## 17. S_cal width hedge (Phase 2) + D framing fixes (Phase 1)
+A-interval width sweep on the late time-split (one training run):
+- mult 0.75 -> coverage 0.700 (under-covers), width 0.097
+- **mult 1.00 (current) -> coverage 0.900, width 0.123 (target hit at min width)**
+- mult 1.25 -> coverage 1.000 (needlessly wide), width 0.149
+- **Decision:** KEEP current A interval (exactly 0.90 at minimum width; tightening under-covers).
+
+D framing (S_write 0.15, no model risk): sharpened IPW degeneracy ("propensity ~1 on approved
+-> weights collapse to near-constant -> diagnostic not de-biaser"); positivity stated as the
+~43% never-approved tail (the forbidden "no overlap ~0" claim removed); score-alignment
+paragraph at top; C 7.2x claim scoped to responsive features. PDF 4 pages, validator PASS.
+
+**Final tally: 17 checks. Model FROZEN. A/B/C unchanged since golden; only D text improved.**

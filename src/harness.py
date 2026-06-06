@@ -37,7 +37,7 @@ def add_credibility(X, df):
     return X
 
 
-def evaluate(credibility=False, seed=0, fit_end=0.60, cal_end=0.75, eval_end=1.00, K=5):
+def evaluate(credibility=False, seed=0, fit_end=0.60, cal_end=0.75, eval_end=1.00, K=5, return_raw=False):
     feat = feature_columns(TR); miss = [c for c in feat if TR[c].isna().mean() > 0.05]
     lab = TR[TR.default_flag.notna()].copy()
     lab["ts"] = pd.to_datetime(lab["application_timestamp"], errors="coerce")
@@ -85,8 +85,23 @@ def evaluate(credibility=False, seed=0, fit_end=0.60, cal_end=0.75, eval_end=1.0
     traj_mae = float(np.mean([abs(cdrcal[:, a - 1].mean() - np.mean((yl == 1) & (dl <= 7 * a))) for a in range(1, N_WEEKS + 1)]))
     half = 1.645 * sdl + 0.01
     cov = binned_coverage(pcal, np.clip(pcal - half, 0, 1), np.clip(pcal + half, 0, 1), yl)
+    if return_raw:
+        return {"pcal": pcal, "sdl": sdl, "yl": yl, "enpv": enpv, "realized": realized, "R": R}
     return {"S_PnL": pnl, "traj_MAE": traj_mae, "AUC": roc_auc_score(yl, pcal),
             "ECE": ece(pcal, yl), "cal_cov": cov, "approve": float((enpv > 0).mean())}
+
+
+def widths():
+    """Phase 2 S_cal hedge: sweep A interval width on the time-split; pick the NARROWEST
+    whose coverage is in [0.90, 0.92] (needless width is penalized). One training run."""
+    r = evaluate(return_raw=True, K=5)
+    p, sd, y = r["pcal"], r["sdl"], r["yl"]
+    print("A interval width sweep (late time-split):")
+    print(f"  {'mult':>5} {'floor':>6} {'coverage':>9} {'mean_width':>11}")
+    for mult in [0.75, 1.0, 1.25]:
+        half = mult * 1.645 * sd + 0.01
+        cov = binned_coverage(p, np.clip(p - half, 0, 1), np.clip(p + half, 0, 1), y)
+        print(f"  {mult:>5.2f} {0.01:>6.2f} {cov:>9.3f} {2*half.mean():>11.3f}")
 
 
 def main():
@@ -122,7 +137,12 @@ def cv():
 
 
 if __name__ == "__main__":
-    cv() if "--cv" in sys.argv else main()
+    if "--cv" in sys.argv:
+        cv()
+    elif "--widths" in sys.argv:
+        widths()
+    else:
+        main()
 
 
 if __name__ == "__main__":

@@ -71,11 +71,12 @@ GBM-native NaN handling, and a strict split between the risk feature set and the
 feature set (`prior_decision` and `prior_approved_amount` never enter the risk model).
 
 **Selection correction.** We fit `e(x)` on all 85,340 rows and form stabilized, clipped
-inverse-propensity weights for the labeled sample. Given the near-deterministic score-based
-selection, these weights primarily *reweight for calibration* and *flag low-overlap*
-applicants; they are not a de-biaser (conditioning is). We verified the risk model is not
-merely cloning prior policy: dropping the entire prior-underwriter group costs ~0 AUC
-(0.773 vs 0.774).
+inverse-propensity weights for the labeled sample. Because approval is nearly deterministic in
+the prior score, the estimated propensity is ~1 on every labeled (approved) loan, so the
+weights collapse to a near-constant: IPW acts as a support/overlap *diagnostic*, not a
+de-biaser. The selection correction rests on **conditioning**, and is limited in the
+never-approved tail. We verified the risk model is not merely cloning prior policy: dropping
+the entire prior-underwriter group costs ~0 AUC (0.773 vs 0.774).
 
 **Economics and decision.** We do not use a stylized accrual formula, because the cure
 mechanism means collected draws != (t-1) draws. Instead we compute realized NPV from the
