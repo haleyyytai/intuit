@@ -23,7 +23,8 @@ when the prior underwriter's own score is included, and 0.720 from genuine appli
 features alone. We therefore read the 1.000 as near-tautological -- the prior *score is the
 decision's basis* -- not as evidence that approval is deterministic in applicant features.
 Because selection is on observables, conditioning on the recorded `prior_underwriter_score`
-makes selection ignorable and identifies the outcome model *where overlap exists*. But
+identifies the outcome model *where overlap exists* under an ignorability assumption (made
+explicit below). But
 conditioning on the score **relocates rather than removes** the positivity problem: approval
 is a near-deterministic threshold on that score, so in the feature space the A/B model
 actually conditions on, ~43% of the decision set lies in a thin-support prior-score region with
@@ -34,7 +35,7 @@ approves about two-thirds of applicants overall and avoids unsupported aggressiv
 the weakest-support region. Dropping the score would restore positivity but reintroduce it as
 *omitted confounding*, since the underwriter's signal would then be unobserved. We therefore
 state ignorability-given-the-score as an *assumption* (the underwriter may also have used
-private signal), backed by the §3 sensitivity analysis, not as a fact proven by the propensity
+private signal), stated explicitly in §3, not as a fact proven by the propensity
 AUC.
 
 **Right-censoring / timing.** Default is defined over a 90-day window (3 consecutive missed
@@ -61,11 +62,11 @@ bake-off on an *internal* train time-split (earlier weeks fit, later weeks selec
 validation reserved for calibration) compared six learners; the incumbent histogram-GBM
 hazard was retained (calibrated Brier 0.1344; the best challenger, CatBoost, was only 0.3%
 better -- below our 2% swap threshold). A calibrated binary logistic PD90 scored within ~1%
-Brier (0.1329) and serves as our simple-model leakage check (not anomalously stronger, so the
-signal is largely additive). We also ran the textbook credit-risk baseline -- pooled logit and
+Brier of the backbone and serves as our simple-model leakage check (not anomalously stronger, so
+the signal is largely additive). We also ran the textbook credit-risk baseline -- pooled logit and
 complementary-log-log discrete-time hazards on the same person-period expansion: as the
-literature predicts they are marginally better *calibrated* (cloglog cal-Brier 0.1329 / ECE 0.036
-vs the GBM's 0.1344 / 0.038), but by only ~1% relative, below our 2% swap bar, so we retained the
+literature predicts they are marginally better *calibrated* even after isotonic (cloglog cal-Brier
+0.13288 / ECE 0.036 vs the GBM's 0.13437 / 0.038), but by only ~1% relative, below our 2% swap bar, so we retained the
 HistGBM hazard (which additionally handles informative missingness natively and mild
 non-linearity), with the GLM hazard as our calibrated reference baseline. Feature handling: log1p on money fields, missingness indicators,
 GBM-native NaN handling, and a strict split between the risk feature set and the selection
@@ -90,8 +91,8 @@ names as wrong (p<0.20 -> \$2.40M, p<0.30 -> \$2.53M) -- landing within 1.4% of 
 *oracle*-tuned threshold (p<0.24, \$2.66M) that a flat policy could only find with the unseen
 outcomes. That gap is the brief's intended insight: low PD is not profitability, and a
 size-aware NPV rule needs no tuning. All figures are on the labeled (supported) region -- the
-honest caveat. The low-score tail, where support is thin, is declined by construction (a
-conservative NPV floor of 0 beats an unsupported approval); this is the standard
+honest caveat. In the thin-support low-score region the rule funds only where E[NPV]>0 and
+declines the rest (a conservative NPV floor of 0 beats an unsupported approval); this is the standard
 **reject-inference** posture for selective labels.
 
 **Deliverable B.** For each origination cohort week we average `1-S(7a|x)` over our *approved*
@@ -121,9 +122,10 @@ intervened feature -- e.g. `requested_amount_to_observed_revenue` moves when
 through it; (ii) **excludes `prior_underwriter_score` from the C model**, because that score
 is a *descendant* of the application features (the underwriter scored them) -- freezing it
 under `do(f)` is the same class of error as not recomputing a ratio, and the audit shows
-excluding it costs ~0 accuracy; (iii) **audits local overlap** and widens intervals (or
-shrinks toward the factual PD) off-support, the literal answer to "interventions you never
-observed"; and (iv) reports an **unobserved-confounding sensitivity band**.
+excluding it costs ~0 accuracy; (iii) **audits local overlap** and widens intervals off-support
+(addressing *positivity* / thin support); and (iv) **states the unobserved-confounding assumption
+explicitly** as the key untested assumption -- a distinct threat from positivity that an overlap
+band does not bound (a formal E-value sweep is the natural next step, not run here).
 
 We validated this on a semi-synthetic system with a *known* effect (default risk driven by
 the leverage ratio, plus a small direct effect; labels made selective by an approval rule).
@@ -191,8 +193,17 @@ cross-check confirms only the material drivers carry effect. We tested whether t
 costs accuracy: on a semi-synthetic test-bed injecting a *known* weak-feature effect, the tree
 recovered 79% of it (so the flatness is bounded), and a smoother logistic C-model recovered more
 on the test-bed but over-extrapolated on the *real* in-support queries (PD ~0.91 under revenue
-interventions for feed and no-feed applicants alike -- linear extrapolation off the data
-manifold, not a missingness-flag artifact), which is *further* from plausible truth than the
-bounded tree -- so we kept the tree plug-in. Other challengers, all measured on a time-split and none promoted: a
-decision risk-margin (noise), credibility-gap features (+0.23%+/-2.16% across folds), per-age
-recalibration (gap already <=0.007), and a backbone swap (no learner beat HistGBM by >2% Brier).
+interventions, feed and no-feed alike -- linear extrapolation off the manifold, verified not a
+missingness-flag artifact), *further* from plausible truth than the bounded tree -- so we kept it. Other challengers, all measured and none promoted: a decision risk-margin,
+credibility features (noise across folds), per-age recalibration, and a backbone swap (none beat HistGBM by >2%).
+
+## References
+
+(Optional; on page 5, excluded from the 4-page body limit.)
+
+1. Prentice, R.L. & Gloeckler, L.A. (1978). Regression analysis of grouped survival data with application to breast cancer data. *Biometrics* 34(1). [discrete-time / cloglog hazard]
+2. Singer, J.D. & Willett, J.B. (2003). *Applied Longitudinal Data Analysis*. Oxford University Press. [person-period discrete-time survival]
+3. Zadrozny, B. & Elkan, C. (2002). Transforming classifier scores into accurate multiclass probability estimates. *KDD*. [isotonic calibration]
+4. Chernozhukov, V. et al. (2018). Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal* 21(1). [partial-linear DML]
+5. VanderWeele, T.J. & Ding, P. (2017). Sensitivity analysis in observational research: introducing the E-value. *Annals of Internal Medicine* 167(4). [unobserved-confounding sensitivity]
+6. Hand, D.J. & Henley, W.E. (1997). Statistical classification methods in consumer credit scoring. *JRSS-A* 160(3). [reject inference / credit scoring]

@@ -82,7 +82,7 @@ def main():
         iso = fit_isotonic(pd90(kind, Xc), yc)
         m = metrics(np.clip(iso.predict(pd90(kind, Xl)), 0, 1), yl)
         m["model"] = kind; rows.append(m)
-        print(f"  {kind:9s} cal-Brier={m['brier']:.4f} logloss={m['logloss']:.4f} AUC={m['auc']:.3f} ECE={m['ece']:.4f}")
+        print(f"  {kind:9s} cal-Brier={m["brier"]:.5f} logloss={m['logloss']:.4f} AUC={m['auc']:.3f} ECE={m["ece"]:.4f}")
 
     res = pd.DataFrame(rows).set_index("model")
     inc = res.loc["histgbm", "brier"]; best_glm = res.loc[["logit", "cloglog"], "brier"].min()
