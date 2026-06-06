@@ -255,9 +255,9 @@ missingness-flag bug fixable under do():
 ## 22. GLM discrete-time hazard baseline (logit / cloglog) -- the writeup's "did not run" experiment, now run
 Pooled logit and complementary-log-log discrete-time hazards on the SAME person-period expansion,
 benchmarked vs HistGBM hazard on the internal train time-split (calibrated on the cal slice):
-- HistGBM (incumbent): cal-Brier 0.1344, AUC 0.778, ECE 0.0379
-- logit hazard:        cal-Brier 0.1330, AUC 0.779, ECE 0.0359
-- **cloglog hazard:    cal-Brier 0.1329, AUC 0.779, ECE 0.0356** (best-calibrated, as the literature predicts)
+- HistGBM (incumbent): cal-Brier 0.13437, AUC 0.778, ECE 0.0379
+- logit hazard:        cal-Brier 0.13297, AUC 0.779, ECE 0.0359
+- **cloglog hazard:    cal-Brier 0.13288, AUC 0.779, ECE 0.0356** (best-calibrated, as the literature predicts)
 - **Decision:** GLM is marginally better calibrated but by only ~1% relative Brier (< 2% swap bar) -> HistGBM
   RETAINED (also handles missingness natively); GLM hazard now a measured calibrated reference. D §2 updated
   from "we did not run it" -> the benchmark numbers. (glm_hazard.py -> audit/glm_hazard.md)
