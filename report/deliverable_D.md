@@ -197,8 +197,6 @@ bounded tree, so we kept the tree.
 
 ## References
 
-(Optional; on page 5, excluded from the 4-page body limit.)
-
 1. Prentice, R.L. & Gloeckler, L.A. (1978). Regression analysis of grouped survival data with application to breast cancer data. *Biometrics* 34(1). [discrete-time / cloglog hazard]
 2. Singer, J.D. & Willett, J.B. (2003). *Applied Longitudinal Data Analysis*. Oxford University Press. [person-period discrete-time survival]
 3. Zadrozny, B. & Elkan, C. (2002). Transforming classifier scores into accurate multiclass probability estimates. *KDD*. [isotonic calibration]
