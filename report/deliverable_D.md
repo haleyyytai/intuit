@@ -172,10 +172,11 @@ First and sharpest, **temporal drift**: the observed default rate rises from 17.
 20.6% (the later validation block), and the test window is later still. We calibrate isotonic on
 validation -- the most recent labeled block -- so the train->validation drift is absorbed, but if
 the upward trend continues into test, our PDs will under-predict, which hurts P&L (we fund loans
-riskier than we think) and calibration (intervals miss low) together. Time-blocked CV shows
-*stability* but does not *correct a trend*; we do not claim the drift is removed, and a
-conservative production hedge would nudge the global PD level toward the most recent observed
-rate. Second, **positivity / reject inference** in the ~43% never-approved-score tail: no
+riskier than we think) and calibration (intervals miss low) together. 5-fold CV (random and
+time-blocked) shows the backbone is *stable* (AUC 0.77 +/- 0.01 both ways) but does not *correct
+a trend* -- the latest rolling folds are measurably harder (Brier ~0.11 -> 0.13). We do not claim
+the drift is removed; a conservative production hedge would nudge the global PD level toward the
+most recent observed rate. Second, **positivity / reject inference** in the ~43% never-approved-score tail: no
 counterfactual evidence there, handled by conservative decline (a safe NPV floor) -- not claimed
 as profit-maximizing, only as declining where we cannot evaluate. Third,
 **loss-given-default is noisy**: collected draws before default are not directly observed, so
