@@ -172,3 +172,22 @@ D framing (S_write 0.15, no model risk): sharpened IPW degeneracy ("propensity ~
 paragraph at top; C 7.2x claim scoped to responsive features. PDF 4 pages, validator PASS.
 
 **Final tally: 17 checks. Model FROZEN. A/B/C unchanged since golden; only D text improved.**
+
+---
+
+## 18. T1 weak-feature gate + T2 logistic-C challenger (REJECTED)
+T1 (semi-synthetic, inject a KNOWN moderate effect of a weak feature, measure recovery):
+- HistGBM C-model recovers **79%** of the weak-feature slope (MAE 0.0107) -> flatness is CHEAP
+  (real-data flatness = those features have ~0 true effect, not a model deficit). GATE: skip T2.
+- Side finding: HistGBM recovers the STRONG feature only 38% (tree saturation under do()).
+
+T2-2c (logistic C-model challenger, on the same test-bed):
+- Logistic recovers better: weak 96% (MAE 0.0061) vs 79%; strong 134% vs 38%.
+- BUT on REAL queries (all in-support, 0% off-support) logistic OVER-extrapolates: 7.6% of
+  predictions hit [0,1] extremes, revenue interventions mean 0.95 (vs tree 0.50). Root cause:
+  intervening on a bank-feed feature leaves a stale `__isna` flag -> off-distribution input ->
+  logistic extrapolates wildly; the tree is robust to it.
+- **Decision:** REVERT to golden HistGBM-C (validated 7.2x naive, bounded). Per prime directive
+  "if none clearly beats the plug-in, keep the plug-in." A/B/C confirmed identical to golden.
+
+**Final tally: 18 checks. Submission = golden + team name + improved D framing. Model FROZEN.**
