@@ -1,0 +1,34 @@
+digraph pipeline {
+  rankdir=LR;
+  bgcolor="white";
+  nodesep=0.28; ranksep=0.5;
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.07"];
+  edge [color="#666666", arrowsize=0.8];
+
+  // --- core flow (grey -> blue) ---
+  data [label="train / val / test", fillcolor="#ededed", color="#bdbdbd"];
+  feat [label="features\n(+ missingness flags)", fillcolor="#ededed", color="#bdbdbd"];
+  ex   [label="approval model e(x)\nIPW / overlap", fillcolor="#cfe2f3", color="#6fa8dc"];
+  haz  [label="weekly survival hazard\n(IPW-weighted, person-period)", fillcolor="#cfe2f3", color="#6fa8dc"];
+
+  // --- method nodes (green), one per scored branch, ordered by weight ---
+  npv  [label="E[NPV] > 0\ndecision", fillcolor="#d9ead3", color="#93c47d"];
+  coh  [label="cohort aggregation\n+ EB shrinkage", fillcolor="#d9ead3", color="#93c47d"];
+  cal  [label="isotonic +\nempirical intervals", fillcolor="#d9ead3", color="#93c47d"];
+  cmod [label="C-model (excl. prior-uw)\ndo(f=v) plug-in", fillcolor="#d9ead3", color="#93c47d"];
+
+  // --- scored outputs (yellow notes, annotated with weight) ---
+  A  [label="A  fund decision + PD\nS_P&L   0.30", shape=note, fillcolor="#fff2cc", color="#dcb84a"];
+  B  [label="B  cohort x age trajectory\nS_traj   0.25", shape=note, fillcolor="#fff2cc", color="#dcb84a"];
+  cl [label="90% intervals (A, B)\nS_cal   0.20", shape=note, fillcolor="#fff2cc", color="#dcb84a"];
+  C  [label="C  counterfactual PD\nS_C    0.10", shape=note, fillcolor="#fff2cc", color="#dcb84a"];
+
+  data -> feat -> ex -> haz;
+  haz -> npv  -> A;
+  haz -> coh  -> B;
+  haz -> cal  -> cl;
+  haz -> cmod -> C;
+
+  { rank=same; npv; coh; cal; cmod; }
+  { rank=same; A; B; cl; C; }
+}

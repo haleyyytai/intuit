@@ -7,13 +7,7 @@ fontsize: 11pt
 
 **Team:** Falcons
 
-**Scoring alignment.** For S_P&L we approve by expected NPV under the official economics
-rather than a PD threshold; for S_traj the same weekly survival system forecasts our own
-approved book's default trajectory; for S_cal we target 90% coverage at minimum width via
-isotonic calibration and empirical intervals; for S_C we use a disciplined plug-in
-(deterministic descendants recomputed, local overlap checks, prior-underwriter excluded from
-the primary model); for S_write we state the selective-label and positivity assumptions
-explicitly.
+![**Figure 1.** One IPW-weighted weekly survival backbone, built around the five scored components: the E[NPV] rule sets funding (S_P&L, 0.30); the same hazard forecasts the cohort trajectory (S_traj, 0.25); isotonic calibration sets the 90% intervals (S_cal, 0.20); a prior-underwriter-free do(f=v) plug-in answers the counterfactuals (S_C, 0.10). We optimized to the rubric, not to a generic classifier (S_write).](../audit/pipeline.png)
 
 ## 1. Problem framing & assumptions violated
 
@@ -130,7 +124,7 @@ We validated this on a semi-synthetic system with a *known* effect (default risk
 the leverage ratio, plus a small direct effect; labels made selective by an approval rule).
 Estimating the dose-response of `do(requested_amount)`:
 
-![C estimator recovers the known effect; naive perturbation does not.](../audit/C_validation.png)
+![**Figure 2.** Semi-synthetic dose-response under do(requested_amount): the disciplined plug-in (green) tracks the known truth (black) while naive perturbation (red) stays flat. Right panel: observed support. Plug-in MAE 0.018 vs naive 0.130.](../audit/C_validation.png)
 
 The disciplined plug-in recovers the true slope within 6% (+0.084 vs +0.089 per \$10k) and is
 7.2x closer to truth in mean absolute error than naive perturbation, which underestimates the
