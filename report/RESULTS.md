@@ -123,3 +123,21 @@ credibility, not failure). All on real challenge data unless noted.
 - B: monotone 13×13, per-age calibration gap ≤0.007, week-13 CDR ~14%.
 - C: plug-in 7.2× closer to truth than naive; 100% DML sign agreement on material features.
 - **Net: 6 adopted, 4 rejected/no-change, 2 audits, 1 model-selection, 1 deferred.**
+
+---
+
+## 15. Rolling-origin time-blocked CV (3 folds) — robustness of decisions
+Temporally-correct CV (random k-fold would leak future->past). Error bars on the baseline
+and a re-test of E6 across folds.
+
+Baseline (mean +/- std over 3 later-block folds):
+- AUC 0.771 +/- 0.008 ; ECE 0.018 +/- 0.007 ; traj_MAE 0.017 +/- 0.006 ;
+  interval coverage 0.930 +/- 0.050 ; approve 0.821 +/- 0.022.
+
+E6 credibility features per fold: +0.00% / -2.30% / +2.97% -> **+0.23% +/- 2.16%**.
+- The single-split -1.82% was NOISE; across folds the mean effect is ~0 with high variance.
+- **Decision:** KEEP BASELINE (confirmed; reason corrected to "no reliable signal").
+- Also confirms the bake-off: backbone Brier gaps (0.1329 vs 0.1344) are smaller than the
+  fold-to-fold AUC noise (+/-0.008), so "no clear challenger" is robust, not a single-split artifact.
+
+**Updated tally: 15 checks — 6 adopted, 5 rejected/no-change, 2 audits, 1 model-selection, 1 deferred.**

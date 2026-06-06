@@ -37,13 +37,14 @@ def add_credibility(X, df):
     return X
 
 
-def evaluate(credibility=False, seed=0):
+def evaluate(credibility=False, seed=0, fit_end=0.60, cal_end=0.75, eval_end=1.00, K=5):
     feat = feature_columns(TR); miss = [c for c in feat if TR[c].isna().mean() > 0.05]
     lab = TR[TR.default_flag.notna()].copy()
     lab["ts"] = pd.to_datetime(lab["application_timestamp"], errors="coerce")
     lab = lab.sort_values("ts").reset_index(drop=True)
     n = len(lab)
-    fit_i = np.arange(0, int(0.60 * n)); cal_i = np.arange(int(0.60 * n), int(0.75 * n)); late_i = np.arange(int(0.75 * n), n)
+    fit_i = np.arange(0, int(fit_end * n)); cal_i = np.arange(int(fit_end * n), int(cal_end * n))
+    late_i = np.arange(int(cal_end * n), int(eval_end * n))
 
     def X(df):
         x = build_features(df, feat, miss)
@@ -60,7 +61,7 @@ def evaluate(credibility=False, seed=0):
     dwk = default_week(lab.iloc[fit_i].reset_index(drop=True))
     PP, ev, wv = expand_person_period(Xf, dwk, w)
     rng = np.random.RandomState(seed)
-    models = [WeeklyHazard(random_state=k).fit(PP.iloc[(i := rng.randint(0, len(PP), len(PP)))].reset_index(drop=True), ev[i], wv[i]) for k in range(5)]
+    models = [WeeklyHazard(random_state=k).fit(PP.iloc[(i := rng.randint(0, len(PP), len(PP)))].reset_index(drop=True), ev[i], wv[i]) for k in range(K)]
 
     def curves(Xa):
         ps, cs, hs = zip(*[((r := m.curves(Xa.copy()))[0], r[1], r[2]) for m in models])
@@ -96,6 +97,32 @@ def main():
         print(f"{k:10s} {base[k]:>14.4f} {cred[k]:>18.4f}")
     rel = (cred["S_PnL"] - base["S_PnL"]) / base["S_PnL"]
     print(f"\nE6 S_P&L delta: {rel:+.2%}  -> {'PROMOTE' if rel > 0.01 else 'KEEP BASELINE (no clear win)'}")
+
+
+def cv():
+    """Rolling-origin (time-blocked) CV: 3 expanding-window folds, evaluating on
+    successive LATER blocks. Reports mean +/- std so we know if a 'win' is robust."""
+    folds = [(0.50, 0.60, 0.70), (0.60, 0.70, 0.85), (0.70, 0.82, 1.00)]
+    METR = ["S_PnL", "traj_MAE", "AUC", "ECE", "cal_cov", "approve"]
+    base, cred, deltas = {m: [] for m in METR}, {m: [] for m in METR}, []
+    for fe, ce, ee in folds:
+        b = evaluate(False, fit_end=fe, cal_end=ce, eval_end=ee, K=3)
+        c = evaluate(True, fit_end=fe, cal_end=ce, eval_end=ee, K=3)
+        for m in METR:
+            base[m].append(b[m]); cred[m].append(c[m])
+        deltas.append((c["S_PnL"] - b["S_PnL"]) / b["S_PnL"])
+        print(f"  fold {fe}-{ee}: baseline S_PnL={b['S_PnL']:,.0f}  AUC={b['AUC']:.3f}  "
+              f"cov={b['cal_cov']:.3f}  | E6 dPnL={deltas[-1]:+.2%}")
+    print(f"\n{'metric':10s} {'baseline mean+/-std':>26s}")
+    for m in METR:
+        a = np.array(base[m]); print(f"{m:10s} {a.mean():>16.4f} +/- {a.std():.4f}")
+    d = np.array(deltas)
+    print(f"\nE6 S_P&L delta across folds: {d.mean():+.2%} +/- {d.std():.2%}  -> "
+          f"{'ROBUST WIN' if d.mean()>0.01 and d.min()>0 else 'NOT a robust win -> KEEP BASELINE'}")
+
+
+if __name__ == "__main__":
+    cv() if "--cv" in sys.argv else main()
 
 
 if __name__ == "__main__":
