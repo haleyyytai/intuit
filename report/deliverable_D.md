@@ -3,11 +3,9 @@ geometry: margin=0.75in
 fontsize: 11pt
 ---
 
-# Deliverable D -- Technical Writeup
+# Deliverable D - Technical Writeup
 
 **Team:** Falcons
-
-![**Figure 1.** One IPW-weighted weekly survival backbone, built around the five scored components: the E[NPV] rule sets funding (S_P&L, 0.30); the same hazard forecasts the cohort trajectory (S_traj, 0.25); isotonic calibration sets the 90% intervals (S_cal, 0.20); a prior-underwriter-free do(f=v) plug-in answers the counterfactuals (S_C, 0.10). We optimized to the rubric, not to a generic classifier (S_write).](../audit/pipeline.png)
 
 ## 1. Problem framing & assumptions violated
 
@@ -50,6 +48,8 @@ of applicants); this is signal, not noise, so we encode missingness indicators r
 impute it away.
 
 ## 2. Methodology
+
+![**Figure 1.** One IPW-weighted weekly survival backbone, built around the five scored components: the E[NPV] rule sets funding (S_P&L, 0.30); the same hazard forecasts the cohort trajectory (S_traj, 0.25); isotonic calibration sets the 90% intervals (S_cal, 0.20); a prior-underwriter-free do(f=v) plug-in answers the counterfactuals (S_C, 0.10).](../audit/pipeline.png)
 
 **One survival backbone for A and B.** We fit a weekly discrete-time hazard
 `h_a(x)=P(default in week a | survived, x)` over 13 weeks (the 90-day window) on
